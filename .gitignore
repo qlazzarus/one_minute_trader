@@ -1,0 +1,71 @@
+# =============================
+# 📱 Flutter / Dart / Android
+# =============================
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
+/android/app/debug
+/android/app/profile
+/android/app/release
+ios/Flutter/Flutter.framework/
+ios/Flutter/App.framework/
+ios/ServiceDefinitions.json
+
+# =============================
+# 💻 Node / Phaser
+# =============================
+phaser/node_modules/
+phaser/dist/
+phaser/.vite/
+phaser/.cache/
+phaser/.parcel-cache/
+phaser/.temp/
+
+# =============================
+# 🧠 OpenAI Codex / AI Tools
+# =============================
+.codex/
+.memory-bank/
+codex-output/
+codex-session.json
+
+# =============================
+# 🧰 IDE / OS / Misc
+# =============================
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VSCode project settings (keep launch.json, exclude local history)
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# =============================
+# 🔒 Sensitive files (optional)
+# =============================
+.env
+.env.*
+*.secret.json
+secrets.json
+*.pem
+*.key
