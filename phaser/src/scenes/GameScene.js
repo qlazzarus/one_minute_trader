@@ -6,7 +6,8 @@ import HUDContainer from '../components/HUDContainer.js';
 import { THEME, FONT_SHADOW } from '../ui/theme.js';
 
 const ROUND_DURATION_MS = 5000;
-const TOTAL_DURATION_MS = 60000;
+const TOTAL_ROUNDS = 12;
+const TOTAL_DURATION_MS = ROUND_DURATION_MS * TOTAL_ROUNDS;
 const PRICE_UPDATE_INTERVAL_MS = 150;
 const BASE_SCORE = 10;
 const FAIL_PENALTY = 5;
@@ -48,28 +49,25 @@ const brightenColor = (colorValue, factor = 1.15) => {
   return Phaser.Display.Color.GetColor(r, g, b);
 };
 
-const BIBI_LINES = {
-  intro: { text: '오늘도 한탕 노려볼까?', voice: 'voice_intro', expression: 'talk' },
-  coinPrompt: { text: '어떤 코인 할래?', voice: 'voice_intro', expression: 'talk' },
-  coinSelected: (coinKey) => ({
-    text: `오늘은 ${coinKey} 간다~ 🚀`,
-    voice: 'voice_coin_start',
-    expression: 'happy',
-    revertAfter: 1800
-  }),
+const BUTTON_BLINK_DURATION = 200; // Blink cycle during final 2 seconds of each round.
+const FINAL_SECONDS_MS = 2000;
+
+const BIBI_REACTIONS = {
+  intro: { category: 'start', expression: 'talk' },
+  coinPrompt: { category: 'start', expression: 'talk' },
+  coinSelected: () => ({ category: 'round_start', expression: 'happy', revertAfter: 1800 }),
   roundStart: (round) => ({
-    text: `라운드 ${round}! 느낌 오는 방향으로 눌러봐~`,
-    voice: null,
+    category: round >= TOTAL_ROUNDS ? 'round_last' : 'round_start',
     expression: 'talk'
   }),
-  predictUp: { text: '올라간다, 올라가~!', voice: 'voice_up', expression: 'talk' },
-  predictDown: { text: '하락장엔 쇼트지~', voice: 'voice_down', expression: 'talk' },
-  locked: { text: '잠금 완료! 차트를 지켜보자~', voice: null, expression: 'idle' },
-  success: { text: '좋았어! 이 감각 계속 이어가자!', voice: null, expression: 'happy', revertAfter: 2000 },
-  combo: { text: '이건 그냥 예언자 수준인데?', voice: 'voice_combo', expression: 'happy', revertAfter: 2200 },
-  fail: { text: '에이, 코인 다 팔걸...', voice: 'voice_fail', expression: 'sad', revertAfter: 2000 },
-  noPrediction: { text: '다음엔 빨리 눌러줘!', voice: null, expression: 'sad', revertAfter: 1600 },
-  sessionEnd: { text: '1분 끝! 수익률 계산 중~', voice: 'voice_timeout', expression: 'talk', revertAfter: 2200 }
+  predictUp: { category: 'round_start', expression: 'talk', suppressVoice: true },
+  predictDown: { category: 'round_start', expression: 'talk', suppressVoice: true },
+  locked: { category: 'round_warning', expression: 'idle', suppressVoice: true },
+  success: { category: 'round_result_win', expression: 'happy', revertAfter: 2000 },
+  combo: { category: 'round_result_combo', expression: 'happy', revertAfter: 2200 },
+  fail: { category: 'round_result_lose', expression: 'sad', revertAfter: 2000 },
+  noPrediction: { category: 'round_warning', expression: 'sad', revertAfter: 1600, suppressVoice: true },
+  sessionEnd: { category: 'game_end', expression: 'talk', revertAfter: 2200 }
 };
 
 export default class GameScene extends Phaser.Scene {
@@ -81,6 +79,7 @@ export default class GameScene extends Phaser.Scene {
     this.score = 0;
     this.streak = 0;
     this.roundIndex = 0;
+    this.currentRound = 0;
     this.timeRemainingMs = TOTAL_DURATION_MS;
     this.sessionActive = false;
     this.roundActive = false;
@@ -95,6 +94,7 @@ export default class GameScene extends Phaser.Scene {
     this.smoothEndValue = 0; // Ending Y value for the current tween.
     this.chartIntroTweens = []; // Collection of active intro tweens.
     this.chartCard = null;
+    this.buttonBlinkTweens = null;
   }
 
   create() {
@@ -112,11 +112,14 @@ export default class GameScene extends Phaser.Scene {
     this.chartWidth = width - 120;
     this.chartHeight = chartHeight;
     const chartOriginX = (width - this.chartWidth) / 2;
+    this.hud.setComboAnchor(width / 2, chartOriginY + (this.chartHeight / 2) + 40);
 
-    //const bibiX = width - 120;
+    // 🔒 BIBI_POSITION_LOCK_START
     const bibiX = width - 240;
-    const bibiY = height - 40; // v6: place Bibi close to bottom edge without overlapping buttons
-    this.bibiDisplay = new BibiDisplay(this, bibiX, bibiY); // Bibi anchored per layout v6 margins.
+    const bibiY = height - 40; // user-defined position, do NOT auto-adjust
+    this.bibiDisplay = new BibiDisplay(this, bibiX, bibiY);
+    // 🔒 BIBI_POSITION_LOCK_END
+
     console.log('Bibi loaded:', this.bibiDisplay?.sprite?.texture?.key); // Quick visibility check for sprite preload.
     this.sayBibi('coinPrompt');
 
@@ -131,13 +134,10 @@ export default class GameScene extends Phaser.Scene {
     this.chartGraphics.setAlpha(0); // Graphics hidden until tween completes.
     this.chartGraphics.setScale(0.96); // Match background scale for cohesive intro.
 
-    const chartBottom = chartOriginY + this.chartHeight;
-
-    this.createPredictionButtons();
+    const buttonY = this.createPredictionButtons();
     this.disablePredictionButtons();
     this.setPredictionButtonsVisible(false); // Hide buttons until gameplay starts (v7)
 
-    const buttonY = this.predictionButtons.up.container.y;
     this.coinSelector = new CoinSelector(this, buttonY - 120, (coin) => {
       this.selectedCoin = coin;
       this.sayBibi('coinSelected', coin.key);
@@ -162,10 +162,12 @@ export default class GameScene extends Phaser.Scene {
 
     this.sessionActive = true;
     this.resetState();
+    this.coinSelector?.hide();
 
     this.chartStrokeColor = this.selectedCoin?.color ?? 0x60a5fa;
     this.enablePredictionButtons();
     this.setPredictionButtonsVisible(true); // Buttons appear only during active play
+    this.clearButtonBlink();
 
     this.playBgm();
     this.timerDisplay.label.setVisible(true); // Timer appears when gameplay begins
@@ -191,17 +193,21 @@ export default class GameScene extends Phaser.Scene {
     this.score = 0;
     this.streak = 0;
     this.roundIndex = 0;
+    this.currentRound = 0;
     this.timeRemainingMs = TOTAL_DURATION_MS;
     this.scoreDisplay.setScore(this.score);
     this.scoreDisplay.setStreak(this.streak);
+    this.hud.setRound(0, TOTAL_ROUNDS);
     this.timerDisplay.reset(TOTAL_DURATION_MS / 1000);
     this.timerDisplay.label.setVisible(false); // Hide timer until a round starts
-    this.setPredictionButtonsVisible(false); // Hide buttons in idle state
+    this.setPredictionButtonsVisible(false); // Keep buttons hidden in idle state
+    this.disablePredictionButtons();
+    this.clearButtonBlink();
     this.priceData = [];
     this.currentPrice = 100;
     this.roundStartPrice = 100;
     this.smoothedData = [];
-    this.sayBibi('roundStart', 1);
+    this.sayBibi('intro');
     this.updateChartGlow(); // Reset any combo glow when a new session begins.
   }
 
@@ -217,15 +223,18 @@ export default class GameScene extends Phaser.Scene {
       }
       this.endGame();
     }
+
+    this.monitorButtonBlink();
   }
 
   startRound() {
     if (!this.sessionActive) return;
-    if (this.timeRemainingMs <= 0) {
+    if (this.currentRound >= TOTAL_ROUNDS) {
       this.endGame();
       return;
     }
 
+    this.currentRound += 1;
     this.roundIndex += 1;
     this.roundActive = true;
     this.roundPrediction = null;
@@ -238,7 +247,8 @@ export default class GameScene extends Phaser.Scene {
     this.playChartIntroTween(); // Kick off fade/scale intro for the chart each round.
     this.updateChartGlow(); // Reapply glow effect in case streak carried over to the new round.
 
-    this.sayBibi('roundStart', this.roundIndex);
+    this.sayBibi('roundStart', this.currentRound);
+    this.hud.setRound(this.currentRound, TOTAL_ROUNDS);
 
     if (this.roundEvent) {
       this.roundEvent.remove(false);
@@ -248,6 +258,7 @@ export default class GameScene extends Phaser.Scene {
       ROUND_DURATION_MS,
       () => {
         this.resolveRound({ dueToTimeout: false });
+        this.clearButtonBlink();
       },
       null,
       this
@@ -259,8 +270,8 @@ export default class GameScene extends Phaser.Scene {
     const sprite = this.bibiDisplay.sprite;
     const spriteCenterX = sprite.x + sprite.displayWidth / 2; // Center aligned with Bibi per layout v5
     const buttonWidth = 220;
-    const buttonOffset = (buttonWidth + 32) / 2; // Maintain 32px edge gap between buttons
-    const buttonY = sprite.y - sprite.displayHeight - 60; // 60px above Bibi top per layout v6
+    const buttonOffset = (buttonWidth + 32) / 2; // Maintain 32px gap between button edges
+    const buttonY = sprite.y - sprite.displayHeight - 60; // 60px above Bibi top per layout v7
 
     const margin = 120;
     let leftX = spriteCenterX - buttonOffset;
@@ -283,14 +294,17 @@ export default class GameScene extends Phaser.Scene {
         this.handlePrediction('down')
       )
     };
+
+    return buttonY;
   }
 
   setPredictionButtonsVisible(visible) {
     Object.values(this.predictionButtons ?? {}).forEach((button) => {
       button.container.setVisible(visible);
-      button.background.setVisible(visible);
-      button.text.setVisible(visible);
     });
+    if (!visible) {
+      this.clearButtonBlink();
+    }
   }
 
   createPredictionButton(x, y, label, color, handler) {
@@ -319,6 +333,7 @@ export default class GameScene extends Phaser.Scene {
     background.on('pointerdown', () => {
       this.sound.play('sfx_button', { volume: 0.4 });
       handler();
+      this.clearButtonBlink();
     });
 
     container.add([background, text]);
@@ -355,6 +370,7 @@ export default class GameScene extends Phaser.Scene {
       button.background.disableInteractive();
       button.background.setAlpha(0.1);
     });
+    this.clearButtonBlink();
   }
 
   updatePrice() {
@@ -408,6 +424,52 @@ export default class GameScene extends Phaser.Scene {
         this.drawChart(); // Ensure final value snaps exactly to the target.
         this.chartTween = null;
       }
+    });
+
+    this.monitorButtonBlink(); // Check if we should blink buttons as round nears completion.
+  }
+
+  monitorButtonBlink() {
+    if (!this.roundActive) {
+      this.clearButtonBlink();
+      return;
+    }
+
+    if (!this.roundStartTime || !this.predictionButtons) {
+      return;
+    }
+
+    const roundElapsed = this.time.now - this.roundStartTime;
+    const roundRemaining = ROUND_DURATION_MS - roundElapsed;
+
+    if (roundRemaining <= FINAL_SECONDS_MS && roundRemaining > 0 && !this.roundPrediction) {
+      this.startButtonBlink();
+    } else {
+      this.clearButtonBlink();
+    }
+  }
+
+  startButtonBlink() {
+    if (this.buttonBlinkTweens || !this.predictionButtons) return;
+    this.buttonBlinkTweens = Object.values(this.predictionButtons).map(({ container }) =>
+      this.tweens.add({
+        targets: container,
+        alpha: { from: 1, to: 0.3 },
+        duration: BUTTON_BLINK_DURATION,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      })
+    );
+  }
+
+  clearButtonBlink() {
+    if (this.buttonBlinkTweens) {
+      this.buttonBlinkTweens.forEach((tween) => tween?.stop());
+      this.buttonBlinkTweens = null;
+    }
+    Object.values(this.predictionButtons ?? {}).forEach(({ container }) => {
+      container.setAlpha(1);
     });
   }
 
@@ -493,6 +555,7 @@ export default class GameScene extends Phaser.Scene {
   resolveRound({ dueToTimeout }) {
     if (!this.roundActive) return;
     this.roundActive = false;
+    this.clearButtonBlink();
 
     if (this.roundEvent) {
       this.roundEvent.remove(false);
@@ -515,6 +578,9 @@ export default class GameScene extends Phaser.Scene {
       this.score += points;
       roundMessage = `Correct! +${points} (${outcome.toUpperCase()})`;
       this.sound.play('sfx_success', { volume: 0.45 });
+      if (multiplier > 1 && this.hud?.showCombo) {
+        this.hud.showCombo(multiplier);
+      }
       if (this.streak >= 3) {
         this.sayBibi('combo');
       } else {
@@ -531,6 +597,7 @@ export default class GameScene extends Phaser.Scene {
     this.updateChartGlow(); // Toggle glow effect based on fresh streak value.
     this.scoreDisplay.setScore(this.score);
     this.scoreDisplay.setStreak(this.streak);
+    this.hud.setRound(this.currentRound, TOTAL_ROUNDS);
 
     console.log(
       `[Round ${this.roundIndex}] Outcome=${outcome} Prediction=${predicted ?? 'none'} Score=${this.score} | ${roundMessage}`
@@ -538,9 +605,14 @@ export default class GameScene extends Phaser.Scene {
 
     this.disablePredictionButtons();
 
+    if (this.currentRound >= TOTAL_ROUNDS) {
+      this.endGame();
+      return;
+    }
+
     if (this.timeRemainingMs > 0 && !dueToTimeout) {
       this.time.delayedCall(800, () => {
-        if (this.timeRemainingMs > 0) {
+        if (this.timeRemainingMs > 0 && this.currentRound < TOTAL_ROUNDS) {
           this.startRound();
         }
       });
@@ -571,8 +643,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.disablePredictionButtons();
+    this.clearButtonBlink();
 
-    this.sayBibi('sessionEnd');
+    this.sayBibi('game_end');
     this.stopBgm();
     this.updateChartGlow(); // Ensure glow is removed when the session wraps up.
 
@@ -580,9 +653,7 @@ export default class GameScene extends Phaser.Scene {
       1500,
       () => {
         this.scene.start('ResultScene', {
-          score: this.score,
-          selectedCoin: this.selectedCoin?.key ?? 'N/A',
-          rounds: this.roundIndex
+          score: this.score
         });
       },
       null,
@@ -663,14 +734,14 @@ export default class GameScene extends Phaser.Scene {
 
   sayBibi(lineKey, ...args) {
     if (!this.bibiDisplay) return;
-    const entry = BIBI_LINES[lineKey];
+    const entry = BIBI_REACTIONS[lineKey];
     if (!entry) return;
 
     const payload = typeof entry === 'function' ? entry(...args) : entry;
-    if (!payload?.text) return;
+    const category = payload?.category ?? 'start';
+    const { expression = null, revertAfter = undefined, suppressVoice = false } = payload ?? {};
 
-    const { voice = null, expression = null, revertAfter = undefined } = payload;
-    this.bibiDisplay.speak(payload.text, voice, { expression, revertAfter });
+    this.bibiDisplay.speak(category, { expression, revertAfter, suppressVoice });
   }
 
   playBgm() {

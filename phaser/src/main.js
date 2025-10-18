@@ -1,9 +1,13 @@
 import Phaser from 'phaser';
 
 import BootScene from './scenes/BootScene.js';
-import MenuScene from './scenes/MenuScene.js';
+import LoadingScene from './scenes/LoadingScene.js';
+import MainMenuScene from './scenes/MainMenuScene.js';
+import MiningScene from './scenes/MiningScene.js';
 import GameScene from './scenes/GameScene.js';
+import FarmScene from './scenes/FarmScene.js';
 import ResultScene from './scenes/ResultScene.js';
+import SettingsScene from './scenes/SettingsScene.js';
 
 const GAME_WIDTH = 480;
 const GAME_HEIGHT = 800;
@@ -18,7 +22,16 @@ const config = {
     width: GAME_WIDTH,
     height: GAME_HEIGHT
   },
-  scene: [BootScene, MenuScene, GameScene, ResultScene]
+  scene: [
+    BootScene,
+    LoadingScene,
+    MainMenuScene,
+    MiningScene,
+    GameScene,
+    FarmScene,
+    ResultScene,
+    SettingsScene
+  ]
 };
 
 // Launch Phaser with the initial scene list.

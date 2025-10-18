@@ -7,19 +7,19 @@ const COIN_CONFIGS = [
 ];
 
 export default class CoinSelector {
-  constructor(scene, chartBottom, onSelect) {
+  constructor(scene, anchorY, onSelect) {
     this.scene = scene;
     this.onSelect = onSelect;
 
     const { width, height } = scene.scale;
-    const verticalSpacing = height * 0.03;
-    const startY = chartBottom - 32 + verticalSpacing; // Title offset + global spacing
     const spacing = height * 0.08;
+    const startY = anchorY;
+    const titleY = anchorY - 60; // Place title just above first button per v7 rules
 
     this.container = scene.add.container(0, 0).setDepth(THEME.depths.hud);
 
     const title = scene.add
-      .text(width / 2, chartBottom - 60, 'Select Coin', {
+      .text(width / 2, titleY, 'Select Coin', {
         fontFamily: THEME.fonts.hud.stackBold,
         fontSize: `${THEME.fonts.hud.size}px`,
         color: THEME.colors.textPrimary

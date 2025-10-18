@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { THEME, FONT_COLOR, FONT_SHADOW } from '../ui/theme.js';
+import BibiDialogueManager from './BibiDialogueManager.js';
 
 const DEFAULT_LINE = '오늘도 한탕 노려볼까?';
 const TEXTURE_KEYS = ['bibi_idle', 'bibi_talk', 'bibi_happy', 'bibi_sad'];
@@ -25,7 +26,7 @@ export default class BibiDisplay {
       }
     });
 
-    this.sprite = scene.add.sprite(x, anchorY, 'bibi_idle').setOrigin(0, 1); // Anchor bottom-left so Bibi sits flush per v6.
+    this.sprite = scene.add.sprite(x, anchorY, 'bibi_idle').setOrigin(0, 1); // Anchor bottom-left so Bibi sits flush.
 
     const targetHeight = height * TARGET_HEIGHT_RATIO; // Scale based on v6 ratio.
     const scaleFactor = targetHeight / this.sprite.height;
@@ -61,14 +62,16 @@ export default class BibiDisplay {
       ease: 'Sine.easeInOut'
     }); // Gentle fade-in when Bibi appears.
 
+    // 🔒 BUBBLE_POSITION_LOCK_START
     const bubbleX = x - 100;
     const bubbleY = anchorY - 160; // Position bubble beside Bibi per layout v6
+    // 🔒 BUBBLE_POSITION_LOCK_END
     const bubbleWidth = 240;
     const bubbleHeight = 68;
 
     this.bubbleContainer = scene.add
       .container(bubbleX, bubbleY)
-      .setDepth(THEME.depths.bubble); // Speech bubble floats beside Bibi per layout v6.
+      .setDepth(THEME.depths.bubble); // Speech bubble floats beside Bibi per layout v7.
 
     const bubbleBg = scene.add
       .rectangle(0, 0, bubbleWidth, bubbleHeight, THEME.colors.bubbleFill, 0.8)
@@ -87,18 +90,24 @@ export default class BibiDisplay {
       .setShadow(1, 1, FONT_SHADOW, 0, true, true);
 
     this.bubbleContainer.add([bubbleBg, this.bubbleText]);
+
+    this.dialogueManager = new BibiDialogueManager(scene);
   }
 
-  speak(text, voiceKey, { suppressVoice = false, expression, revertAfter } = {}) {
-    this.bubbleText.setText(text);
+  speak(category, { suppressVoice = false, expression, revertAfter } = {}) {
+    const line = this.dialogueManager.say(category);
+    this.bubbleText.setText(line);
 
     if (expression) {
       const duration = typeof revertAfter === 'number' ? revertAfter : expression === 'bibi_idle' ? null : 1400;
       this.setExpression(expression, { revertAfter: duration });
     }
 
-    if (!suppressVoice && voiceKey) {
-      this.playVoice(voiceKey);
+    if (!suppressVoice) {
+      const voiceKey = this.dialogueManager.getRandomVoiceKey(category);
+      if (voiceKey) {
+        this.playVoice(voiceKey);
+      }
     }
   }
 
@@ -131,9 +140,13 @@ export default class BibiDisplay {
 
     const audioCache = this.scene.cache?.audio;
     if (!audioCache || !audioCache.exists(key)) {
+      console.warn(`[BibiDisplay] Missing voice asset for key: ${key}`, {
+        available: Object.keys(audioCache?.entries || {})
+      });
       return;
     }
 
+    console.debug('[BibiDisplay] Playing voice clip', key);
     this.scene.sound.play(key, { volume: 0.65 });
   }
 

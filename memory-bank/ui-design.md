@@ -179,3 +179,9 @@ Phaser 렌더링, Flutter WebView 통합, 그리고 Bibi 캐릭터 중심 인터
   - Prediction Buttons 표시
   - Bibi의 말풍선은 라운드별 멘트로 전환
   - Timer 표시 시작
+
+### ⚠️ Layout Override
+- BibiDisplay 위치는 GameScene.js 내부 수동 조정 좌표(width - 240, height - 40)를 유지하며,
+  Codex는 자동 재배치하지 않는다.  
+- BubbleDisplay 위치는 BibiDisplay.js 내부 수동 조정 좌표를 유지하며,
+  Codex는 자동 재배치하지 않는다.  

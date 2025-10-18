@@ -44,7 +44,8 @@ export default class ResultScene extends Phaser.Scene {
       .setShadow(1, 1, FONT_SHADOW, 0, true, true);
 
     this.input.once('pointerdown', () => {
-      this.scene.start('MenuScene');
+      console.log('[Phase 1.3] Returning to MainMenuScene from ResultScene.');
+      this.scene.start('MainMenuScene');
     });
   }
 }

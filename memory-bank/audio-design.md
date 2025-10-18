@@ -23,3 +23,13 @@
 - Phaser의 `this.sound.play()`로 처리
 - 음성은 mp3, 효과음은 wav
 - 향후 ElevenLabs API로 캐릭터 보이스 자동 생성 고려
+
+## Bibi Voice Categories
+- start → bibi_start_1~3.mp3
+- round_start → bibi_round_start_1~3.mp3
+- round_warning → bibi_round_warning_1~3.mp3
+- round_result_win → bibi_win_1~3.mp3
+- round_result_lose → bibi_lose_1~3.mp3
+- round_result_combo → bibi_combo_1~3.mp3
+- round_last → bibi_last_1~3.mp3
+- game_end → bibi_end_1~3.mp3
